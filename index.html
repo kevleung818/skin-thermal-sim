@@ -1,0 +1,200 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Skin Thermal Encounter Simulation - Release Build</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #0f1115; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #e2e8f0; overflow: hidden; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        #ui-layer { position: absolute; top: 20px; left: 20px; z-index: 10; background: rgba(22, 28, 36, 0.85); padding: 25px; border-radius: 12px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { margin: 0 0 5px 0; font-size: 18px; font-weight: 600; letter-spacing: -0.5px; }
+        .version-badge { background: #10b981; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-weight: bold; display: inline-block; margin-bottom: 15px; }
+        .control-group { margin-bottom: 20px; }
+        label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        input[type="range"] { width: 100%; -webkit-appearance: none; background: #334155; height: 6px; border-radius: 3px; outline: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #10b981; cursor: pointer; transition: transform 0.1s; }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+        .legend { margin-top: 25px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 8px; font-size: 12px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 3px; margin-right: 10px; }
+    </style>
+    <!-- Import Three.js and OrbitControls for 3D staging -->
+    <script src="https://cloudflare.com"></script>
+    <script src="https://jsdelivr.net"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <h1>Thermal Encounter Sim</h1>
+        <div class="version-badge">Release Build v1.0.0</div>
+        
+        <div class="control-group">
+            <label id="time-label">Exposure Time: 0.0s</label>
+            <input type="range" id="time-slider" min="0" max="20" step="0.1" value="0">
+        </div>
+
+        <div class="control-group">
+            <label id="intensity-label">Energy Radius: 1.0x</label>
+            <input type="range" id="intensity-slider" min="0.5" max="2.5" step="0.1" value="1.0">
+        </div>
+
+        <div class="legend">
+            <label>Thermal Thresholds</label>
+            <div class="legend-item"><div class="legend-color" style="background: #eaeaea;"></div>65°C Core (Coagulation / Necrosis)</div>
+            <div class="legend-item"><div class="legend-color" style="background: #800a1d;"></div>50°C Boundary (Stasis / Blistering)</div>
+            <div class="legend-item"><div class="legend-color" style="background: #e63946;"></div>40°C Halo (Hyperemia / Flushing)</div>
+            <div class="legend-item"><div class="legend-color" style="background: #ddb8a6;"></div>30°C Basin (Baseline / Equilibrium)</div>
+        </div>
+    </div>
+
+    <script>
+        // Production 3D Engine Initialization
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0f1115);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(7, 5, 7);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent camera from going underground
+
+        // Lighting Architecture
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // Structural Skin Layers (Anatomical Block Setup)
+        const blockGeo = new THREE.BoxGeometry(4, 2, 4, 64, 32, 64);
+        
+        // Custom Shader Material for Dynamic Thermal Propagation
+        const thermalMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0.0 },
+                uIntensity: { value: 1.0 },
+                uProbePos: { value: new THREE.Vector3(0, 1, 0) }
+            },
+            vertexShader: `
+                uniform float uTime;
+                uniform float uIntensity;
+                uniform vec3 uProbePos;
+                varying vec3 vPosition;
+                varying vec3 vNormal;
+                
+                void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    vec3 pos = position;
+                    
+                    // Simulate physical epidermis blister swelling at the 50C threshold over time
+                    float dist = distance(pos, uProbePos);
+                    if(pos.y > 0.9 && dist < (uTime * 0.08 * uIntensity) && dist > (uTime * 0.03)) {
+                        float blisterWave = sin((dist * 5.0) - (uTime * 2.0)) * 0.08;
+                        pos.y += max(0.0, blisterWave);
+                    }
+                    
+                    vPosition = pos;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform float uTime;
+                uniform float uIntensity;
+                uniform vec3 uProbePos;
+                varying vec3 vPosition;
+                varying vec3 vNormal;
+
+                void main() {
+                    float dist = distance(vPosition, uProbePos);
+                    
+                    // Calculate thermal expansion based on time and source intensity
+                    float coreRadius = uTime * 0.04 * uIntensity;
+                    float stasisRadius = uTime * 0.09 * uIntensity;
+                    float hyperemiaRadius = uTime * 0.18 * uIntensity;
+
+                    // Base anatomical skin coloring (Y-axis dependent layered structural system)
+                    vec3 skinColor = vec3(0.86, 0.72, 0.65); // Epidermis/Dermis default
+                    if (vPosition.y < -0.4) {
+                        skinColor = vec3(0.95, 0.82, 0.40); // Yellow Subcutaneous Fat
+                    }
+
+                    // Apply the 4 distinct fixed-point thermal encounters over baseline
+                    if (dist < coreRadius) {
+                        skinColor = mix(vec3(0.92, 0.92, 0.92), vec3(0.8), dist/coreRadius); // 65°C Core
+                    } else if (dist < stasisRadius) {
+                        float w = (dist - coreRadius) / (stasisRadius - coreRadius);
+                        skinColor = mix(vec3(0.5, 0.04, 0.11), vec3(0.7, 0.1, 0.2), w);     // 50°C Boundary
+                    } else if (dist < hyperemiaRadius) {
+                        float w = (dist - stasisRadius) / (hyperemiaRadius - stasisRadius);
+                        skinColor = mix(vec3(0.9, 0.22, 0.27), skinColor, w);               // 40°C Halo
+                    } // Beyond hyperemia, tissue remains at the 30°C to 37°C stable sink
+
+                    // Add subtle shading depth based on face normal data
+                    float lighting = dot(vNormal, normalize(vec3(1.0, 1.0, 1.0))) * 0.3 + 0.7;
+                    gl_FragColor = vec4(skinColor * lighting, 1.0);
+                }
+            `,
+            side: THREE.DoubleSide
+        });
+
+        const skinMesh = new THREE.Mesh(blockGeo, thermalMaterial);
+        skinMesh.position.y = 0;
+        scene.add(skinMesh);
+
+        // Contact Probe Geometry Indicator
+        const probeGeo = new THREE.SphereGeometry(0.15, 16, 16);
+        const probeMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+        const probeMesh = new THREE.Mesh(probeGeo, probeMat);
+        probeMesh.position.set(0, 1, 0);
+        scene.add(probeMesh);
+
+        // Interactivity Event Hooks
+        const timeSlider = document.getElementById('time-slider');
+        const intensitySlider = document.getElementById('intensity-slider');
+        const timeLabel = document.getElementById('time-label');
+        const intensityLabel = document.getElementById('intensity-label');
+
+        timeSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            thermalMaterial.uniforms.uTime.value = val;
+            timeLabel.innerText = `Exposure Time: ${val.toFixed(1)}s`;
+        });
+
+        intensitySlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            thermalMaterial.uniforms.uIntensity.value = val;
+            intensityLabel.innerText = `Energy Radius: ${val.toFixed(1)}x`;
+        });
+
+        // Window resize listener
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Main Render Loop
+        function animate() {
+            requestAnimationFrame(animate);
+Use code with caution.
+controls.update();
+renderer.render(scene, camera);
+}
+animate();
+
+
